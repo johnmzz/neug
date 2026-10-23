@@ -15,7 +15,8 @@
 
 #pragma once
 
-#include <stdexcept>
+// This header is force-included in every Windows C++ compilation, including
+// third-party libraries. Keep standard library dependencies at their use sites.
 
 /// Cross-platform hint to force a function to be inlined.
 #ifdef _WIN32

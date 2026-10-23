@@ -16,6 +16,7 @@
 #include "node_query_request.h"
 
 #include <sstream>
+#include <stdexcept>
 #include <string>
 
 #include "neug/common/types/value.h"

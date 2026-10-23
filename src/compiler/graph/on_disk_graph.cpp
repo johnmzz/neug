@@ -22,6 +22,8 @@
 
 #include "neug/compiler/graph/on_disk_graph.h"
 
+#include <stdexcept>
+
 #include "neug/compiler/binder/expression/expression_util.h"
 #include "neug/compiler/binder/expression/property_expression.h"
 #include "neug/compiler/binder/expression_visitor.h"

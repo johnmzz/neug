@@ -14,6 +14,9 @@
  */
 
 #include "neug/execution/expression/exprs/variable.h"
+
+#include <stdexcept>
+
 #include "neug/execution/common/context.h"
 #include "neug/execution/expression/accessors/const_accessor.h"
 #include "neug/execution/expression/accessors/edge_accessor.h"

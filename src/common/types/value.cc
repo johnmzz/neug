@@ -20,6 +20,9 @@
  */
 
 #include "neug/common/types/value.h"
+
+#include <stdexcept>
+
 #include "neug/utils/encoder.h"
 #include "neug/utils/exception/exception.h"
 #include "neug/utils/serialization/in_archive.h"

@@ -20,6 +20,7 @@
 #include "utils/option_utils.h"
 #include "utils/subgraph_utils.h"
 
+#include <stdexcept>
 #include <string>
 #include "neug/utils/exception/exception.h"
 
