@@ -81,7 +81,18 @@ target_include_directories(neug PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/compiler>
     $<INSTALL_INTERFACE:include/neug/compiler>)
 
-neug_apply_symbol_visibility(neug)
+if(ANDROID AND NEUG_LITE AND BUILD_COMPILER)
+    # The Android SDK uses the C API; hide all internal C++ and static libc++ symbols.
+    set(_neug_android_exports "${CMAKE_CURRENT_SOURCE_DIR}/c_api/android.exports.map")
+    target_link_options(neug PRIVATE
+        "LINKER:--version-script,${_neug_android_exports}"
+        # Keep linker-generated protobuf section boundary symbols private as well.
+        "LINKER:-z,start-stop-visibility=hidden"
+        "LINKER:--no-undefined-version")
+    set_property(TARGET neug APPEND PROPERTY LINK_DEPENDS "${_neug_android_exports}")
+else()
+    neug_apply_symbol_visibility(neug)
+endif()
 
 install_neug_target(neug)
 if (ENABLE_BACKTRACES)

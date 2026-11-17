@@ -1,0 +1,38 @@
+# Android Lite exports only the C API; internal C++ and static runtime symbols stay private.
+{
+  global:
+    neug_version;
+    neug_error_message;
+    neug_error_destroy;
+    neug_db_options_init;
+    neug_db_open;
+    neug_db_is_closed;
+    neug_db_close;
+    neug_db_destroy;
+    neug_db_connect;
+    neug_connection_is_closed;
+    neug_connection_destroy;
+    neug_connection_begin;
+    neug_connection_commit;
+    neug_connection_rollback;
+    neug_connection_has_transaction;
+    neug_query;
+    neug_result_destroy;
+    neug_result_row_count;
+    neug_result_column_count;
+    neug_result_column_name;
+    neug_result_column_type;
+    neug_result_get_value;
+    neug_value_type;
+    neug_value_is_null;
+    neug_value_get_bool;
+    neug_value_get_int64;
+    neug_value_get_uint64;
+    neug_value_get_double;
+    neug_value_get_string;
+    neug_value_size;
+    neug_value_child;
+    neug_value_field_name;
+  local:
+    *;
+};

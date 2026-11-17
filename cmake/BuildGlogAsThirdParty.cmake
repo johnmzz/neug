@@ -30,6 +30,15 @@ function (build_glog_as_third_party)
     set(WITH_UNWIND OFF CACHE BOOL "Disable libunwind to avoid symbol conflict with libgcc_s" FORCE)
 
     add_subdirectory(third_party/glog)
+    if(ANDROID)
+        # glog refers to the Android system log library, not the Abseil target of the same name.
+        foreach(_property LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
+            get_target_property(_links glog ${_property})
+            list(REMOVE_ITEM _links log "$<LINK_ONLY:log>")
+            set_property(TARGET glog PROPERTY ${_property} "${_links}")
+        endforeach()
+        target_link_libraries(glog PRIVATE "-llog")
+    endif()
     include_directories(third_party/glog/src)
     include_directories(${CMAKE_CURRENT_BINARY_DIR}/third_party/glog/) # For generated headers
     set_target_properties(glog PROPERTIES DEBUG_POSTFIX "")

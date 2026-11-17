@@ -10,6 +10,7 @@ add_neug_test(
 	test_input_stream.cc
 	test_output_stream.cc
 	json_test.cc)
+target_link_libraries(utils_test PRIVATE re2)
 if(NOT WIN32)
     target_sources(utils_test PRIVATE test_file_utils.cc)
 endif()

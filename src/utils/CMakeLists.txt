@@ -2,8 +2,10 @@
 set(PROTO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../proto)
 
 function(compile_proto OUT_HDRS OUT_SRCS DESTDIR HDR_OUTPUT_DIR PROTO_DIR PROTO_FILES)
-        # Prefer the built protoc target; fall back to found executable
-        if (TARGET protobuf::protoc)
+        # Use the host tool when cross-compiling; the target-platform protoc cannot run on the host.
+        if (NEUG_HOST_PROTOC)
+                set(PROTOC_EXE "${NEUG_HOST_PROTOC}")
+        elseif (TARGET protobuf::protoc)
                 set(PROTOC_EXE $<TARGET_FILE:protobuf::protoc>)
         elseif (DEFINED PROTOBUF_PROTOC_EXECUTABLE)
                 set(PROTOC_EXE ${PROTOBUF_PROTOC_EXECUTABLE})
@@ -71,7 +73,7 @@ function(compile_proto OUT_HDRS OUT_SRCS DESTDIR HDR_OUTPUT_DIR PROTO_DIR PROTO_
                         ${_POST_PROTOC_COMMANDS}
                         # When HDR_OUTPUT_DIR differs from DESTDIR, optionally copy headers
                         COMMAND ${CMAKE_COMMAND} -E copy ${HDR} ${HDR_OUTPUT_DIR}/${HDR_RELATIVE}
-                        DEPENDS ${PROTO_DIR}/${REL_PROTO}
+                        DEPENDS ${PROTO_DIR}/${REL_PROTO} ${PROTOC_EXE} ${PROTO_FILES}
                         COMMENT "Generating protobuf C++ from ${REL_PROTO}"
                         VERBATIM
                 )
@@ -123,7 +125,7 @@ endif()
 
 add_library(neug_proto OBJECT ${ALL_PROTO_SRCS})
 
-if (TARGET protobuf::protoc)
+if (TARGET protobuf::protoc AND NOT NEUG_HOST_PROTOC)
         add_dependencies(neug_proto protobuf::protoc)
 endif()
 

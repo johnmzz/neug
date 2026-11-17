@@ -153,16 +153,18 @@ static inline std::string translate(const std::string& pattern) {
       // '&', '~', (extended character set operations)
       // '#' (comment) and WHITESPACE (ignored) in verbose mode
       static std::string special_characters = "()[]{}?*+-|^$\\.&~# \t\n\r\v\f";
-      static std::map<int, std::string> special_characters_map;
-      if (special_characters_map.empty()) {
+      // C++ guarantees thread-safe local static initialization, avoiding concurrent mutations on the first match.
+      static const auto special_characters_map = [] {
+        std::map<int, std::string> escaped;
         for (auto& sc : special_characters) {
-          special_characters_map.insert(std::make_pair(
+          escaped.insert(std::make_pair(
               static_cast<int>(sc), std::string{"\\"} + std::string(1, sc)));
         }
-      }
+        return escaped;
+      }();
 
       if (special_characters.find(c) != std::string::npos) {
-        result_string += special_characters_map[static_cast<int>(c)];
+        result_string += special_characters_map.at(static_cast<int>(c));
       } else {
         result_string += c;
       }
@@ -218,8 +220,8 @@ static inline bool has_magic(const std::string& pathname) {
 }
 
 static inline bool is_hidden(const std::string& pathname) {
-  static const auto check = RE2("^(.*\\/)*\\.[^\\.\\/]+\\/*$");
-  return RE2::FullMatch(pathname, check);
+  const auto name = fs::path(pathname).filename().string();
+  return !name.empty() && name.front() == '.';
 }
 
 static inline bool is_recursive(const std::string& pattern) {
@@ -298,7 +300,7 @@ static inline std::vector<fs::path> glob1(const fs::path& dirname,
   auto names = iter_directory(dirname, dironly);
   std::vector<fs::path> filtered_names;
   for (auto& n : names) {
-    if (!is_hidden(n.string())) {
+    if (!is_hidden(n.string()) || (!pattern.empty() && pattern.front() == '.')) {
       filtered_names.push_back(n.filename());
       // if (n.is_relative()) {
       //   // std::cout << "Filtered (Relative): " << n << "\n";

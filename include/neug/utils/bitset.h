@@ -50,6 +50,11 @@ namespace detail {
 inline void* AlignedAlloc(size_t alignment, size_t size) {
 #ifdef _WIN32
   return _aligned_malloc(size, alignment);
+#elif defined(__ANDROID__) && __ANDROID_API__ < 28
+  // aligned_alloc is unavailable before Android API 28; both allocation paths
+  // use free.
+  void* ptr = nullptr;
+  return posix_memalign(&ptr, alignment, size) == 0 ? ptr : nullptr;
 #else
   return aligned_alloc(alignment, size);
 #endif

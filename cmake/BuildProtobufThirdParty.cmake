@@ -31,7 +31,11 @@ function (build_protobuf_as_third_party)
     set(protobuf_BUILD_TESTS OFF CACHE BOOL "Build protobuf tests" FORCE)
     set(protobuf_BUILD_CONFORMANCE OFF CACHE BOOL "Build protobuf conformance tests")
     set(protobuf_BUILD_EXAMPLES OFF CACHE BOOL "Build protobuf examples")
-    set(protobuf_BUILD_PROTOC_BINARIES ON CACHE BOOL "Build protoc binaries")
+    if(NEUG_HOST_PROTOC)
+        set(protobuf_BUILD_PROTOC_BINARIES OFF CACHE BOOL "Build protoc binaries" FORCE)
+    else()
+        set(protobuf_BUILD_PROTOC_BINARIES ON CACHE BOOL "Build protoc binaries" FORCE)
+    endif()
     set(protobuf_BUILD_LIBPROTOC ON CACHE BOOL "Build libprotoc")
     set(protobuf_BUILD_LIBUPB ON CACHE BOOL "Build libupb")
     set(protobuf_WITH_ZLIB ON CACHE BOOL "Build with zlib")
@@ -63,6 +67,15 @@ function (build_protobuf_as_third_party)
         endif()
     endif()
     add_subdirectory(third_party/protobuf)
+    if(NEUG_HOST_PROTOC)
+        # The protoc version corresponding to C++ library version 5.29.6 is 29.6.
+        get_directory_property(_neug_protobuf_version DIRECTORY third_party/protobuf
+            DEFINITION protobuf_VERSION_STRING)
+        string(REGEX REPLACE "^[0-9]+\\.(.+)$" "\\1" _neug_expected_protoc "${_neug_protobuf_version}")
+        if(NOT _neug_protoc_version STREQUAL "libprotoc ${_neug_expected_protoc}")
+            message(FATAL_ERROR "Host protoc version mismatch: ${_neug_protoc_version}; the bundled protobuf requires libprotoc ${_neug_expected_protoc}. Rebuild protoc from the bundled sources.")
+        endif()
+    endif()
     # Suppress warnings in third-party protobuf code (especially with -Werror).
     # -Wno-missing-requires: protobuf v29.6 port.h uses C++20 concepts that
     # trigger this warning on GCC 13+.
@@ -127,7 +140,11 @@ function (build_protobuf_as_third_party)
     # from the system-library path found by find_library(PROTOC_LIB name
     # protoc) in the root CMakeLists.txt; do not mix the two forms.
     set(PROTOC_LIB protobuf::libprotoc PARENT_SCOPE)
-    set(Protobuf_PROTOC_EXECUTABLE ${CMAKE_CURRENT_BINARY_DIR}/third_party/protobuf/protoc PARENT_SCOPE)
+    if(NEUG_HOST_PROTOC)
+        set(Protobuf_PROTOC_EXECUTABLE "${NEUG_HOST_PROTOC}" PARENT_SCOPE)
+    else()
+        set(Protobuf_PROTOC_EXECUTABLE ${CMAKE_CURRENT_BINARY_DIR}/third_party/protobuf/protoc PARENT_SCOPE)
+    endif()
 
     if(_neug_restore_build_shared_libs)
         set(BUILD_SHARED_LIBS ${_neug_prev_build_shared_libs} CACHE BOOL "Build shared libraries" FORCE)

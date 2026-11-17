@@ -15,7 +15,9 @@
 
 #include "neug/execution/execute/ops/batch/batch_update_utils.h"
 
-#ifdef _WIN32
+// POSIX glob is unavailable before Android API 28; reuse the existing portable
+// implementation.
+#if defined(_WIN32) || (defined(__ANDROID__) && __ANDROID_API__ < 28)
 #include "glob/glob/glob.hpp"
 #else
 #include <glob.h>
@@ -450,7 +452,7 @@ std::vector<std::string> match_files_with_pattern(
   std::vector<std::string> result;
   if (file_path.find('*') != std::string::npos ||
       file_path.find('?') != std::string::npos) {
-#ifdef _WIN32
+#if defined(_WIN32) || (defined(__ANDROID__) && __ANDROID_API__ < 28)
     for (const auto& p : glob::glob(file_path)) {
       result.push_back(p.string());
     }
