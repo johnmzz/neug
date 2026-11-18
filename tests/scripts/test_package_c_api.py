@@ -95,7 +95,8 @@ class PackageChecks(unittest.TestCase):
                     "-D": "0000 T neug_version",
                     "/nologo /headers": "            8664 machine (x64)\n",
                     "/nologo /dependents": f"    {dependency}\n",
-                    "/nologo /exports": "    1 0 00001000 neug_version\n",
+                    "/nologo /exports": "    1 0 00001000 neug_version\n"
+                    "    2 1 00001020 ?method@neug_internal@@QEAAXXZ\n",
                 }
 
                 def output(args):

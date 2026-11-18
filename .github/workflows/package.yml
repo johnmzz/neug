@@ -445,9 +445,16 @@ jobs:
         shell: bash
     timeout-minutes: 120
     steps:
+    - name: Preserve Patch Line Endings
+      if: runner.os == 'Windows'
+      run: git config --global core.autocrlf false
     - uses: actions/checkout@v4
-      with:
-        submodules: recursive
+    - name: Fetch Lite Dependencies
+      run: |
+        git submodule update --init --recursive --depth 1 --jobs 2 -- \
+          third_party/parallel-hashmap third_party/glog third_party/yaml-cpp \
+          third_party/protobuf third_party/rapidjson third_party/HowardHinnant/date \
+          third_party/gflags third_party/abseil-cpp
     - uses: actions/setup-python@v5
       with:
         python-version: '3.11'

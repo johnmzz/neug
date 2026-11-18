@@ -231,7 +231,9 @@ def check_windows_library(library, arch):
         )
     exported = set(
         re.findall(
-            r"\b(neug_\w+)\b", run(["dumpbin", "/nologo", "/exports", str(library)])
+            r"^\s+\d+\s+[0-9A-F]+\s+[0-9A-F]+\s+(neug_\w+)(?:\s|$)",
+            run(["dumpbin", "/nologo", "/exports", str(library)]),
+            re.M,
         )
     )
     return dependencies, exported
