@@ -3,6 +3,14 @@ name: Verify Artifacts
 on:
   workflow_call:
     inputs:
+      c_api_only:
+        description: Skip wheel, extension, npm and Java artifact verification.
+        type: boolean
+        default: false
+      verify_c_api:
+        description: Verify the macOS ARM64 Lite C API artifact.
+        type: boolean
+        default: false
       plan:
         type: string
         default: ''
@@ -31,12 +39,58 @@ jobs:
       platforms: ${{ inputs.plan == '' && inputs.verify_java && format('{0},java', join(fromJSON(inputs.platforms), ',')) || inputs.platforms }}
       python_versions: ${{ inputs.python_versions }}
 
+  c-api:
+    if: inputs.verify_c_api
+    name: Installed Lite C API / osx-arm64
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+    # No submodules or NeuG build dependencies: consume only the downloaded package.
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Download C API Package
+      uses: actions/download-artifact@v4
+      with:
+        name: c-api-osx-arm64-${{ github.run_id }}
+        path: build/c-api-download
+    - name: Verify Extracted C API Package
+      shell: bash
+      run: |
+        set -euo pipefail
+        test "$(uname -m)" = arm64
+        archives=(build/c-api-download/*.tar.gz)
+        test "${#archives[@]}" -eq 1
+        python3 scripts/package_c_api.py verify "${archives[0]}"
+    - name: Summarize Verification
+      run: |
+        python3 - <<'PY'
+        import json, os
+        from pathlib import Path
+        report, = Path('build/c-api-dist').glob('verify-*/verification.json')
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+            summary.write('## Lite C API package verification\n```json\n')
+            summary.write(json.dumps(json.loads(report.read_text()), indent=2))
+            summary.write('\n```\n')
+        PY
+    - name: Upload Verification Diagnostics
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: c-api-verify-logs-osx-arm64-${{ github.run_id }}
+        path: |
+          build/c-api-dist/**/*.log
+          build/c-api-dist/**/verification.json
+        if-no-files-found: ignore
+        retention-days: 7
+
   # ========================================
   # Verify wheel, extension, and npm artifacts in one independent environment per platform.
   # ========================================
   verify:
     needs: ci-plan
-    if: fromJSON(needs.ci-plan.outputs.plan).platforms[0] != null
+    if: ${{ !inputs.c_api_only && fromJSON(needs.ci-plan.outputs.plan).platforms[0] != null }}
     name: Installed Packages / ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -241,7 +295,7 @@ jobs:
   java:
     # Native-platform-only package runs do not produce a Java artifact.
     needs: ci-plan
-    if: inputs.verify_java && fromJSON(needs.ci-plan.outputs.plan).verify_java
+    if: ${{ !inputs.c_api_only && inputs.verify_java && fromJSON(needs.ci-plan.outputs.plan).verify_java }}
     name: Installed Java Artifact
     runs-on: ubuntu-22.04
     container: ubuntu:22.04

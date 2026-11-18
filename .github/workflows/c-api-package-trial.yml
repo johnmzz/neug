@@ -1,0 +1,17 @@
+name: C API package trial
+
+on:
+  push:
+    branches:
+      - ci/c-api-package-trial
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  package:
+    uses: ./.github/workflows/package.yml
+    with:
+      c_api_only: true
