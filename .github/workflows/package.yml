@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       c_api_only:
-        description: Build and verify only the macOS ARM64 Lite C API (ignores platforms and python_versions).
+        description: Build only Lite C API packages for selected platforms (ignores python_versions).
         type: boolean
         default: false
       platforms:
@@ -37,7 +37,7 @@ on:
   workflow_call:
     inputs:
       c_api_only:
-        description: Build and verify only the macOS ARM64 Lite C API.
+        description: Build and verify only Lite C API packages for selected platforms.
         type: boolean
         default: false
       plan:
@@ -86,7 +86,7 @@ jobs:
     needs: version-check
     uses: ./.github/workflows/ci-plan.yml
     with:
-      platforms: ${{ inputs.c_api_only && 'osx-arm64' || inputs.platforms || 'all' }}
+      platforms: ${{ inputs.platforms || 'all' }}
       python_versions: ${{ inputs.python_versions || 'all' }}
       plan: ${{ !inputs.c_api_only && inputs.plan || '' }}
 
@@ -431,11 +431,18 @@ jobs:
         if-no-files-found: error
         retention-days: 7
 
-  c-api-macos:
+  c-api:
     needs: initialize
-    if: contains(fromJSON(needs.initialize.outputs.plan).platforms, 'osx-arm64')
-    name: Package Lite C API / osx-arm64
-    runs-on: macos-15
+    if: fromJSON(needs.initialize.outputs.plan).c_api_matrix[0] != null
+    name: Package Lite C API (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.initialize.outputs.plan).c_api_matrix }}
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 120
     steps:
     - uses: actions/checkout@v4
@@ -444,19 +451,26 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    - name: Check Build Tools
+    - name: Setup MSVC
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+    - name: Install Linux Build Tools
+      if: runner.os == 'Linux'
       run: |
-        test "$(uname -m)" = arm64
-        cmake --version
-        xcrun clang --version
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake binutils
+    - name: Check Build Tools
+      run: cmake --version
     - name: Test Packaging Checks
-      run: python3 -m unittest discover -s tests/scripts -p test_package_c_api.py -v
+      run: python -m unittest discover -s tests/scripts -p test_package_c_api.py -v
     - name: Build and Verify Lite C API
-      run: python3 scripts/package_c_api.py build --jobs 2
+      run: python scripts/package_c_api.py build --jobs 2
     - name: Upload C API Package
       uses: actions/upload-artifact@v4
       with:
-        name: c-api-osx-arm64-${{ github.run_id }}
+        name: c-api-${{ matrix.platform }}-${{ github.run_id }}
         path: |
           build/c-api-dist/*.tar.gz
           build/c-api-dist/*.tar.gz.sha256
@@ -466,7 +480,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: c-api-build-logs-osx-arm64-${{ github.run_id }}
+        name: c-api-build-logs-${{ matrix.platform }}-${{ github.run_id }}
         path: |
           build/c-api-dist/**/*.log
           build/c-api-dist/**/verification.json
@@ -477,13 +491,13 @@ jobs:
   # Download the uploaded artifacts in independent environments and run package smoke tests.
   # ========================================
   verify:
-    if: ${{ !cancelled() && needs.initialize.result == 'success' && (needs.linux_wheel.result == 'success' || needs.linux_wheel.result == 'skipped') && (needs.linux-npm.result == 'success' || needs.linux-npm.result == 'skipped') && (needs.macos.result == 'success' || needs.macos.result == 'skipped') && (needs.windows.result == 'success' || needs.windows.result == 'skipped') && (needs.java.result == 'success' || needs.java.result == 'skipped') && (needs.c-api-macos.result == 'success' || needs.c-api-macos.result == 'skipped') }}
-    needs: [initialize, linux_wheel, linux-npm, macos, windows, java, c-api-macos]
+    if: ${{ !cancelled() && needs.initialize.result == 'success' && (needs.linux_wheel.result == 'success' || needs.linux_wheel.result == 'skipped') && (needs.linux-npm.result == 'success' || needs.linux-npm.result == 'skipped') && (needs.macos.result == 'success' || needs.macos.result == 'skipped') && (needs.windows.result == 'success' || needs.windows.result == 'skipped') && (needs.java.result == 'success' || needs.java.result == 'skipped') && (needs.c-api.result == 'success' || needs.c-api.result == 'skipped') }}
+    needs: [initialize, linux_wheel, linux-npm, macos, windows, java, c-api]
     uses: ./.github/workflows/verify-artifacts.yml
     with:
       plan: ${{ needs.initialize.outputs.plan }}
       c_api_only: ${{ inputs.c_api_only || false }}
-      verify_c_api: ${{ contains(fromJSON(needs.initialize.outputs.plan).platforms, 'osx-arm64') }}
+      verify_c_api: ${{ fromJSON(needs.initialize.outputs.plan).c_api_matrix[0] != null }}
     secrets: inherit
 
   # ========================================
@@ -491,13 +505,14 @@ jobs:
   # ========================================
   complete:
     if: always()
-    needs: [version-check, initialize, linux_wheel, linux-npm, macos, windows, java, npm-main, c-api-macos, verify]
+    needs: [version-check, initialize, linux_wheel, linux-npm, macos, windows, java, npm-main, c-api, verify]
     runs-on: ubuntu-22.04
     steps:
 
     - name: Require Successful Builds and Artifact Tests
       env:
         RESULTS: ${{ toJSON(needs) }}
+        C_API_ONLY: ${{ inputs.c_api_only || false }}
       run: |
         python3 - <<'PYCODE'
         import json, os
@@ -506,6 +521,8 @@ jobs:
             summary.write('## Package result\n```json\n' + json.dumps(results, indent=2) + '\n```\n')
         assert results['initialize']['result'] == 'success', results
         assert results['verify']['result'] == 'success', results
+        if os.environ['C_API_ONLY'] == 'true':
+            assert results['c-api']['result'] == 'success', 'No supported C API platform was built'
         assert all(job['result'] in ('success', 'skipped') for job in results.values()), results
         PYCODE
 
@@ -533,7 +550,7 @@ jobs:
         STATUS_WINDOWS="${{ needs.windows.result }}"
         STATUS_JAVA="${{ needs.java.result }}"
         STATUS_NPM_MAIN="${{ needs.npm-main.result }}"
-        STATUS_C_API="${{ needs.c-api-macos.result }}"
+        STATUS_C_API="${{ needs.c-api.result }}"
         STATUS_VERIFY="${{ needs.verify.result }}"
         # A package run passes unless a stage actually failed or was cancelled;
         # a legitimately skipped stage (a platform not selected by the plan)
@@ -550,7 +567,7 @@ jobs:
             \"msgtype\": \"markdown\",
             \"markdown\": {
               \"title\": \"$TITLE\",
-              \"text\": \"## $TITLE\\n\\n- **version-check**: ${STATUS_VERSION_CHECK}\\n- **initialize**: ${STATUS_INITIALIZE}\\n- **linux_wheel**: ${STATUS_LINUX_WHEEL}\\n- **linux-npm**: ${STATUS_LINUX_NPM}\\n- **macos**: ${STATUS_MACOS}\\n- **windows**: ${STATUS_WINDOWS}\\n- **java**: ${STATUS_JAVA}\\n- **npm-main**: ${STATUS_NPM_MAIN}\\n- **c-api-macos**: ${STATUS_C_API}\\n- **verify**: ${STATUS_VERIFY}\\n- **Repo**: ${{ github.repository }}\\n- **Branch**: ${{ github.ref_name }}\\n- **Commit**: ${{ github.sha }}\\n- [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\"
+              \"text\": \"## $TITLE\\n\\n- **version-check**: ${STATUS_VERSION_CHECK}\\n- **initialize**: ${STATUS_INITIALIZE}\\n- **linux_wheel**: ${STATUS_LINUX_WHEEL}\\n- **linux-npm**: ${STATUS_LINUX_NPM}\\n- **macos**: ${STATUS_MACOS}\\n- **windows**: ${STATUS_WINDOWS}\\n- **java**: ${STATUS_JAVA}\\n- **npm-main**: ${STATUS_NPM_MAIN}\\n- **c-api**: ${STATUS_C_API}\\n- **verify**: ${STATUS_VERIFY}\\n- **Repo**: ${{ github.repository }}\\n- **Branch**: ${{ github.ref_name }}\\n- **Commit**: ${{ github.sha }}\\n- [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\"
             }
           }")
         echo "DingTalk response: $RESP"

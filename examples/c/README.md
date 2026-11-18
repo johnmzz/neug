@@ -1,68 +1,81 @@
 # NeuG Lite C API binary package
 
-This package provides an embedded NeuG database through a self-contained C
-header and one native shared library. It contains no Python/Node bindings,
-HTTP server or optional extensions. Protobuf and other required third-party
-code are linked into the library; only macOS system libraries are loaded
-separately. C++ applications can use the same C API.
+Use an embedded NeuG database through one C header and a native shared library.
+This package excludes Python/Node bindings, the HTTP server and optional
+extensions. Required third-party code, including protobuf, is linked into the
+library. Only operating-system libraries are loaded separately. C++ applications
+can use the same C API.
 
-Choose a package matching your CPU architecture. `manifest.json` records the
-version, build settings, macOS deployment target, system dependencies and file
-hashes. The deployment target is the build's minimum OS setting; it does not
-mean every macOS version has been tested. Use matching headers and library.
+Choose a package matching your operating system and CPU architecture. Keep the
+header and library from the same release. `manifest.json` records build settings,
+system dependencies and file hashes.
 
-Before extracting, check the archive against its adjacent checksum file:
+| Platform | Runtime library | Additional link-time file |
+| --- | --- | --- |
+| Linux | `lib/libneug.so` | None |
+| macOS | `lib/libneug.dylib` | None |
+| Windows | `bin/neug.dll` | `lib/neug.lib` (MSVC import library) |
+
+Every package contains `include/neug/c/neug.h`. No other NeuG headers, protobuf
+installation or NeuG source checkout is needed. Windows `.lib` is used when
+linking C/C++ applications; it is not another DLL to deploy. Linux and Windows
+packages include their C++ runtimes in the library.
+
+## Extract and run
+
+Check the archive against its adjacent SHA256 file before extracting. On Linux,
+use `sha256sum -c <archive>.sha256`; on macOS, use `shasum -a 256 -c
+<archive>.sha256`. In PowerShell, compare `(Get-FileHash <archive>
+-Algorithm SHA256).Hash` with the hash in `<archive>.sha256`.
 
 ```sh
-shasum -a 256 -c neug-c-api-<version>-lite-osx-<arch>.tar.gz.sha256
-
-tar -xzf neug-c-api-<version>-lite-osx-<arch>.tar.gz
+tar -xzf <archive>.tar.gz
 ```
 
-The two files needed by your application are:
-
-```text
-include/neug/c/neug.h    Header used when compiling your application
-lib/libneug.dylib       Library used when linking and running it
-```
-
-Keep both files at those paths to use `<neug/c/neug.h>`. No other NeuG headers,
-protobuf installation or NeuG source checkout is needed. The remaining files
-are examples, metadata and license information.
-
-From the extracted package root, compile and run the basic C example with a
-C compiler and CMake:
+From the extracted directory, with CMake and a C compiler installed:
 
 ```sh
 cmake -S examples -B example-build -DCMAKE_PREFIX_PATH="$PWD"
 
-cmake --build example-build
+cmake --build example-build --config Release
 
 ./example-build/neug_c_example
 ```
 
-It prints `1 | O'Connor`. CMake sets the example's runtime library search path.
-For your own application, configure the include and library directories, link
-against `neug`, and set a runtime search path for the deployed library location.
-The library identifies itself as `@rpath/libneug.dylib` and contains no build
-machine search paths. The package has an ad-hoc signature for local loading,
-not an Apple Developer ID signature or notarization; sign it as appropriate
-when distributing your macOS application.
+On Windows, use a Visual Studio developer PowerShell and run
+`.\example-build\Release\neug_c_example.exe` with the default Visual Studio
+generator. The example build copies `neug.dll` next to the executable.
+The example prints `1 | O'Connor`.
 
-`examples/verify.c` additionally checks parameters, commit, rollback, recovery
-after a query error, and persistence across separate processes. Compile it as
-C or C++ (replace `cc -std=c11` with `c++ -x c++ -std=c++17`):
+For your own application, add `include` to the header search path and link against
+`neug` in `lib`. On Linux/macOS, configure a runtime search path to the deployed
+library directory. On Windows, place `neug.dll` beside your executable. Library
+objects must be released using the C API functions, never the caller's `free`.
+
+## Verification and compatibility
+
+`examples/verify.c` checks parameters, commit, rollback, recovery after a query
+error, and persistence across separate processes. To build it as both C and C++,
+add `-DNEUG_VERIFY_PACKAGE=ON` to the CMake command above and rebuild. Run each
+verification executable with a separate, new test database directory:
 
 ```sh
-cc -std=c11 examples/verify.c -Iinclude -Llib -lneug \
-  -Wl,-rpath,"$PWD/lib" -o verify
+./example-build/verify_c ./test-c-db <version> write
 
-# Use a new, test-only database directory and the version in manifest.json.
-./verify ./test-db <version> write
-
-./verify ./test-db <version> read
+./example-build/verify_c ./test-c-db <version> read
 ```
 
-Each command prints `PASS: C API package` followed by its phase. Callers must
-check status codes, destroy query results and error objects, and close the
-connection and database. See `neug.h` for ownership and transaction rules.
+Repeat with `verify_cpp` and another database directory. With the Windows Visual
+Studio generator, use `.\example-build\Release\verify_c.exe` or `verify_cpp.exe`.
+Use the version in `manifest.json`. Each successful phase prints `PASS: C API
+package` followed by `write` or `read`.
+
+- Linux CI builds on Ubuntu 22.04. The binary's minimum glibc version is recorded
+  in `manifest.json`; this is not a musl/Alpine package.
+- macOS records its deployment target. That setting does not mean every macOS
+  version has been tested. The library uses `@rpath/libneug.dylib` with an ad-hoc
+  signature; sign it appropriately when distributing your application.
+- Windows CI uses MSVC on Windows Server 2022 with a static C/C++ runtime. The
+  import library is intended for MSVC-compatible consumers.
+
+See `neug.h` for ownership, error handling and transaction rules.

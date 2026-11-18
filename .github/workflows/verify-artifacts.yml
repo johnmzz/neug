@@ -8,7 +8,7 @@ on:
         type: boolean
         default: false
       verify_c_api:
-        description: Verify the macOS ARM64 Lite C API artifact.
+        description: Verify the selected Lite C API artifacts.
         type: boolean
         default: false
       plan:
@@ -40,32 +40,51 @@ jobs:
       python_versions: ${{ inputs.python_versions }}
 
   c-api:
-    if: inputs.verify_c_api
-    name: Installed Lite C API / osx-arm64
-    runs-on: macos-15
+    needs: ci-plan
+    if: inputs.verify_c_api && fromJSON(needs.ci-plan.outputs.plan).c_api_matrix[0] != null
+    name: Installed Lite C API (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.ci-plan.outputs.plan).c_api_matrix }}
+    runs-on: ${{ matrix.runner }}
+    container: ${{ startsWith(matrix.platform, 'linux-') && 'ubuntu:22.04' || '' }}
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 15
     steps:
     # No submodules or NeuG build dependencies: consume only the downloaded package.
+    - name: Prepare Independent Linux Image
+      if: runner.os == 'Linux'
+      run: |
+        apt-get update
+        apt-get install -y git ca-certificates python3 python-is-python3 cmake build-essential binutils
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
+      if: runner.os != 'Linux'
       with:
         python-version: '3.11'
+    - name: Setup MSVC
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
     - name: Download C API Package
       uses: actions/download-artifact@v4
       with:
-        name: c-api-osx-arm64-${{ github.run_id }}
+        name: c-api-${{ matrix.platform }}-${{ github.run_id }}
         path: build/c-api-download
     - name: Verify Extracted C API Package
       shell: bash
       run: |
         set -euo pipefail
-        test "$(uname -m)" = arm64
         archives=(build/c-api-download/*.tar.gz)
         test "${#archives[@]}" -eq 1
-        python3 scripts/package_c_api.py verify "${archives[0]}"
+        python scripts/package_c_api.py verify "${archives[0]}"
     - name: Summarize Verification
       run: |
-        python3 - <<'PY'
+        python - <<'PY'
         import json, os
         from pathlib import Path
         report, = Path('build/c-api-dist').glob('verify-*/verification.json')
@@ -78,7 +97,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: c-api-verify-logs-osx-arm64-${{ github.run_id }}
+        name: c-api-verify-logs-${{ matrix.platform }}-${{ github.run_id }}
         path: |
           build/c-api-dist/**/*.log
           build/c-api-dist/**/verification.json

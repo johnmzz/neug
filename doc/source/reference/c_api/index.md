@@ -67,15 +67,15 @@ The example uses a temporary database and prints `1 | O'Connor`. With multi-conf
 - **C API:** included whenever `BUILD_COMPILER=ON`, in both standard and Lite builds. Lite does not select a target OS or perform cross-compilation by itself.
 - **Try the installed example:** set `NEUG_PREFIX="$PWD/build/c-api-install"` and follow the commands above.
 
-### Build a macOS Lite binary package
+### Build a Lite binary package
 
-With the source build dependencies, CMake, Python 3 and Xcode Command Line Tools installed:
+Use CMake, Python 3 and a native C/C++ toolchain: GCC and binutils on Linux, Xcode Command Line Tools on macOS, or an MSVC developer shell with Ninja on Windows:
 
 ```sh
 python3 scripts/package_c_api.py build --jobs 2
 ```
 
-This reconfigures the shared `build/` directory for Lite Release, disables language bindings and optional dependencies, builds the library, and verifies the extracted package before placing the archive and SHA256 file in `build/c-api-dist/`. The package includes one public header, one library, examples, a README, a license and a manifest. Only macOS system dynamic dependencies are allowed. Build and verification logs are retained under the same output directory.
+This reconfigures the shared `build/` directory for Lite Release, disables language bindings and optional dependencies, builds the library, and verifies the extracted package before placing the archive and SHA256 file in `build/c-api-dist/`. The package includes one public header, one library, examples, a README, a license and a manifest. Only operating-system dynamic dependencies are allowed. Windows also includes an MSVC import library (`neug.lib`) for linking. Build and verification logs are retained under the same output directory.
 
 To check an existing archive independently:
 
@@ -83,9 +83,9 @@ To check an existing archive independently:
 python3 scripts/package_c_api.py verify /path/to/package.tar.gz
 ```
 
-Keep its adjacent `.tar.gz.sha256` file. Verification builds the packaged C example and runs the transaction/persistence example as both C and C++. This packaging entry currently supports native macOS builds; it does not publish a release or build other platforms.
+Keep its adjacent `.tar.gz.sha256` file. Verification builds the packaged C example and runs the transaction/persistence example as both C and C++. This entry builds for the current machine; it does not cross-compile or publish a release. Linux CI uses Ubuntu 22.04 and records the binary's minimum glibc version. Windows packages statically link the C/C++ runtime.
 
-For a CI trial, run the **package** GitHub Actions workflow on your branch with **c_api_only** enabled. It builds only the macOS ARM64 Lite C API, then downloads and verifies the archive on a separate runner. Normal package runs also include this artifact when `osx-arm64` is selected. Download `c-api-osx-arm64-<run_id>` from the run's **Artifacts** section; it contains the `.tar.gz` and `.sha256` files. Build and verification logs are separate artifacts, retained for seven days. These are CI artifacts, not published GitHub Release assets.
+For a CI trial, run the **package** GitHub Actions workflow on your branch with **c_api_only** enabled. Choose `linux-x86_64`, `osx-arm64`, `windows-x86_64`, or `all`. Each selected package is downloaded and verified on a separate runner; normal package runs also include these C API artifacts. Download `c-api-<platform>-<run_id>` from the run's **Artifacts** section; it contains the `.tar.gz` and `.sha256` files. Build and verification logs are separate artifacts, retained for seven days. These are CI artifacts, not published GitHub Release assets.
 
 ## Call sequence
 

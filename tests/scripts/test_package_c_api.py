@@ -42,6 +42,10 @@ class PackageChecks(unittest.TestCase):
         for names, link in (
             (["../escape"], False),
             (["/absolute"], False),
+            (["C:/escape"], False),
+            (["package/dir\\escape"], False),
+            (["package//alias"], False),
+            (["package/file", "package/FILE"], False),
             (["package/link"], True),
             (["one/file", "two/file"], False),
             (["package/file", "package/file"], False),
@@ -68,6 +72,71 @@ class PackageChecks(unittest.TestCase):
             tar.addfile(info, io.BytesIO(b"header"))
         extracted = package.extract_package(archive, self.root / "unpacked")
         self.assertEqual((extracted / "include/neug.h").read_bytes(), b"header")
+
+    def test_linux_and_windows_dependency_guards(self):
+        header = self.root / "neug.h"
+        header.write_text(
+            "#include <stddef.h>\n#include <stdint.h>\n"
+            "const char* neug_version(void);\n"
+        )
+        for system, dependency, expected_error in (
+            ("Linux", "libc.so.6", None),
+            ("Linux", "libprotobuf.so", "Non-system"),
+            ("Linux", "libstdc++.so.6", "Non-system"),
+            ("Windows", "KERNEL32.dll", None),
+            ("Windows", "VCRUNTIME140.dll", "Non-system"),
+            ("Windows", "zlib1.dll", "Non-system"),
+        ):
+            with self.subTest(system=system, dependency=dependency):
+                outputs = {
+                    "-h": "  Machine: Advanced Micro Devices X86-64\n",
+                    "-d": f"(NEEDED) Shared library: [{dependency}]\n"
+                    "(SONAME) Library soname: [libneug.so]",
+                    "-D": "0000 T neug_version",
+                    "/nologo /headers": "            8664 machine (x64)\n",
+                    "/nologo /dependents": f"    {dependency}\n",
+                    "/nologo /exports": "    1 0 00001000 neug_version\n",
+                }
+
+                def output(args):
+                    key = " ".join(args[1:3]) if args[0] == "dumpbin" else args[1]
+                    return outputs[key]
+
+                with patch.object(package, "run", side_effect=output):
+                    if expected_error:
+                        with self.assertRaisesRegex(RuntimeError, expected_error):
+                            package.check_library(
+                                self.root / "lib", "x86_64", header, system
+                            )
+                    else:
+                        self.assertEqual(
+                            package.check_library(
+                                self.root / "lib", "x86_64", header, system
+                            ),
+                            [dependency],
+                        )
+                        with self.assertRaisesRegex(RuntimeError, "architecture"):
+                            package.check_library(
+                                self.root / "lib", "arm64", header, system
+                            )
+
+    def test_linux_glibc_minimum_uses_numeric_version_order(self):
+        with patch.object(
+            package, "run", return_value="GLIBC_2.9 GLIBC_2.35 GLIBC_2.3.4"
+        ):
+            self.assertEqual(package.linux_glibc_requirement(self.root / "lib"), "2.35")
+
+    def test_ci_platform_selection(self):
+        from scripts.ci_plan import resolve
+
+        self.assertEqual(
+            [
+                row["platform"]
+                for row in resolve("linux-x86_64,windows-x86_64")["c_api_matrix"]
+            ],
+            ["linux-x86_64", "windows-x86_64"],
+        )
+        self.assertEqual(resolve("java")["c_api_matrix"], [])
 
     def test_library_dependency_architecture_and_export_guards(self):
         header = self.root / "neug.h"
@@ -123,10 +192,14 @@ class PackageChecks(unittest.TestCase):
                 with patch.object(package, "run", side_effect=output):
                     if message:
                         with self.assertRaisesRegex(RuntimeError, message):
-                            package.check_library(self.root / "lib", "arm64", header)
+                            package.check_library(
+                                self.root / "lib", "arm64", header, "Darwin"
+                            )
                     else:
                         self.assertEqual(
-                            package.check_library(self.root / "lib", "arm64", header),
+                            package.check_library(
+                                self.root / "lib", "arm64", header, "Darwin"
+                            ),
                             [dependency],
                         )
 

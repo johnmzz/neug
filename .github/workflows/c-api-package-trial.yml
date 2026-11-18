@@ -1,9 +1,9 @@
-name: C API package trial
+name: C API Linux and Windows trial
 
 on:
   push:
     branches:
-      - ci/c-api-package-trial
+      - ci/c-api-platform-trial
 
 permissions:
   contents: read
@@ -15,3 +15,4 @@ jobs:
     uses: ./.github/workflows/package.yml
     with:
       c_api_only: true
+      platforms: linux-x86_64,windows-x86_64
