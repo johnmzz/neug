@@ -1,0 +1,17 @@
+name: C API release trial
+
+on:
+  push:
+    branches: [ci/c-api-release-trial]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  package:
+    uses: ./.github/workflows/package.yml
+    with:
+      c_api_only: true
+      platforms: linux-x86_64,osx-arm64,windows-x86_64
