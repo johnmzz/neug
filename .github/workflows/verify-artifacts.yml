@@ -11,6 +11,10 @@ on:
         description: Verify the selected Lite C API artifacts.
         type: boolean
         default: false
+      c_api_run_id:
+        description: Download C API artifacts from this earlier run; empty uses the current run.
+        type: string
+        default: ''
       plan:
         type: string
         default: ''
@@ -73,7 +77,9 @@ jobs:
     - name: Download C API Package
       uses: actions/download-artifact@v4
       with:
-        name: c-api-${{ matrix.platform }}-${{ github.run_id }}
+        name: c-api-${{ matrix.platform }}-${{ inputs.c_api_run_id || github.run_id }}
+        run-id: ${{ inputs.c_api_run_id || github.run_id }}
+        github-token: ${{ github.token }}
         path: build/c-api-download
     - name: Verify Extracted C API Package
       shell: bash

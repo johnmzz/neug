@@ -15,4 +15,13 @@ jobs:
     uses: ./.github/workflows/package.yml
     with:
       c_api_only: true
-      platforms: linux-x86_64,windows-x86_64
+      platforms: linux-x86_64
+
+  verify-windows:
+    uses: ./.github/workflows/verify-artifacts.yml
+    with:
+      platforms: '["windows-x86_64"]'
+      c_api_only: true
+      verify_c_api: true
+      verify_java: false
+      c_api_run_id: '44272900006'

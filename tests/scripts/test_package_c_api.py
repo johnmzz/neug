@@ -1,6 +1,8 @@
 """Checks for package rejection paths; native smoke tests run in the packager."""
 
 import io
+import shutil
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -27,6 +29,31 @@ class PackageChecks(unittest.TestCase):
             package.read_cache(cache),
             {"CMAKE_BUILD_TYPE": "Release", "BUILD_EXTENSIONS": "", "NEUG_LITE": "ON"},
         )
+
+    @unittest.skipUnless(shutil.which("cmake"), "CMake is required")
+    def test_cmake_honors_skip_rpath_with_gnu(self):
+        source = (package.ROOT / "CMakeLists.txt").read_text()
+        start = source.index("if (APPLE)\n    set(CMAKE_MACOSX_RPATH ON)")
+        end = source.index("# Only add OpenMP", start)
+        script = self.root / "rpath.cmake"
+        script.write_text(
+            "set(APPLE FALSE)\nset(WIN32 FALSE)\n"
+            "set(CMAKE_CXX_COMPILER_ID GNU)\n"
+            + source[start:end]
+            + '\nif(CMAKE_SKIP_RPATH AND CMAKE_CXX_FLAGS MATCHES "-rpath")\n'
+            '  message(FATAL_ERROR "CMAKE_SKIP_RPATH was ignored")\n'
+            'elseif(NOT CMAKE_SKIP_RPATH AND NOT CMAKE_CXX_FLAGS MATCHES "-rpath")\n'
+            '  message(FATAL_ERROR "Default RPATH behavior changed")\n'
+            "endif()\n"
+        )
+        for enabled in ("ON", "OFF"):
+            with self.subTest(skip_rpath=enabled):
+                subprocess.run(
+                    ["cmake", f"-DCMAKE_SKIP_RPATH={enabled}", "-P", str(script)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
 
     def test_archive_checksum_is_checked_before_extraction(self):
         archive = self.root / "package.tar.gz"
